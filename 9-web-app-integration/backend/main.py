@@ -1,40 +1,30 @@
-"""
-Day 9 Demo: LLM Web App with Streaming
-FastAPI backend that proxies requests to Gemini API with SSE streaming.
-
-Key concepts:
-- Why a backend? API key security, rate limiting, prompt management
-- StreamingResponse + SSE format for real-time token delivery
-- Per-session rate limiting (simple in-memory implementation)
-- Token counting and cost estimation
-"""
-
 import json
 import os
 import time
+import re
 from collections import defaultdict
+from typing import List
 
 import google.generativeai as genai
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 load_dotenv()
 
-# ─── Setup ────────────────────────────────────────────────────────────────────
 
+# ─── Setup ─────────────────────────────────────────────────────
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY not set")
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemma4-31b-it")
+model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
 app = FastAPI(title="LLM Chat API")
 
-# Allow requests from the React dev server
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -43,11 +33,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ─── Rate limiting (in-memory, per session) ────────────────────────────────────
-# In production: use Redis + sliding window per authenticated user
 
-RATE_LIMIT_REQUESTS = 20   # max requests per window
-RATE_LIMIT_WINDOW = 60     # seconds
+# ─── Rate limiting ─────────────────────────────────────────────
+RATE_LIMIT_REQUESTS = 20
+RATE_LIMIT_WINDOW = 60
 
 request_timestamps: dict[str, list[float]] = defaultdict(list)
 
@@ -55,7 +44,6 @@ request_timestamps: dict[str, list[float]] = defaultdict(list)
 def check_rate_limit(session_id: str) -> bool:
     now = time.time()
     window_start = now - RATE_LIMIT_WINDOW
-    # Drop timestamps outside the window
     request_timestamps[session_id] = [
         t for t in request_timestamps[session_id] if t > window_start
     ]
@@ -65,8 +53,7 @@ def check_rate_limit(session_id: str) -> bool:
     return True
 
 
-# ─── Cost estimation ──────────────────────────────────────────────────────────
-# Gemini 2.5 Flash Lite pricing (as of 2025, per million tokens)
+# ─── Cost estimation ───────────────────────────────────────────
 INPUT_COST_PER_M = 0.10
 OUTPUT_COST_PER_M = 0.40
 
@@ -76,35 +63,131 @@ def estimate_cost(input_tokens: int, output_tokens: int) -> float:
            (output_tokens / 1_000_000) * OUTPUT_COST_PER_M
 
 
-# ─── Request model ────────────────────────────────────────────────────────────
+# ─── Study Buddy state (materiaalit + quiz tila) ───────────────
+session_material_chunks: dict[str, List[str]] = {}
+session_last_question: dict[str, str] = {}
 
+
+# ─── Study engine (chunking + context + promptit) ──────────────
+def chunk_text(text: str, chunk_size: int = 800, overlap: int = 100):
+    chunks = []
+    start = 0
+    while start < len(text):
+        chunks.append(text[start:start + chunk_size])
+        start += chunk_size - overlap
+    return chunks
+
+
+def get_relevant_chunks(chunks, query, top_k=3):
+    scores = []
+    query_words = set(re.findall(r"\w+", query.lower()))
+
+    for chunk in chunks:
+        chunk_words = set(re.findall(r"\w+", chunk.lower()))
+        score = len(query_words & chunk_words)
+        scores.append((score, chunk))
+
+    scores.sort(key=lambda x: x[0], reverse=True)
+    return [c for s, c in scores[:top_k] if s > 0]
+
+
+def build_context(chunks, query):
+    relevant = get_relevant_chunks(chunks, query)
+    return "\n\n---\n\n".join(relevant) if relevant else ""
+
+
+def build_explain_prompt(context):
+    return f"""
+You are a study buddy.
+Explain clearly using the material below.
+Material:
+{context}
+"""
+
+
+def build_quiz_prompt(context):
+    return f"""
+You are a study buddy.
+Ask ONE question based on the material.
+Do not explain yet.
+Material:
+{context}
+"""
+
+
+def build_evaluation_prompt(context, question, answer):
+    return f"""
+You are a study assistant.
+
+Question:
+{question}
+
+User answer:
+{answer}
+
+Material:
+{context}
+
+Evaluate the answer (correct / partial / incorrect) and ask a new question.
+"""
+
+
+# ─── Request model ─────────────────────────────────────────────
 class ChatRequest(BaseModel):
     message: str
-    history: list[dict] = []   # [{"role": "user"|"assistant", "content": "..."}]
+    history: list[dict] = []
     session_id: str = "default"
+    mode: str = "explain"
 
 
-
-# ─── Endpoints ────────────────────────────────────────────────────────────────
-
+# ─── Health check ──────────────────────────────────────────────
 @app.get("/health")
 async def health():
     return {"status": "ok"}
 
 
+# ─── Upload (materiaalin syöttö AI:lle) ────────────────────────
+@app.post("/upload")
+async def upload(file: UploadFile = File(...), session_id: str = "default"):
+    content = await file.read()
+    text = content.decode("utf-8", errors="ignore")
+
+    chunks = chunk_text(text)
+    session_material_chunks[session_id] = chunks
+
+    return {"status": "uploaded", "chunks": len(chunks)}
+
+
+# ─── Chat (non-stream) ─────────────────────────────────────────
 @app.post("/chat")
 async def chat(request: ChatRequest):
-    """
-    Non-streaming endpoint — returns the full response at once.
-    Shown alongside /chat/stream so students can feel the UX difference.
-    """
     if not check_rate_limit(request.session_id):
-        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again in a moment.")
+        raise HTTPException(status_code=429, detail="Rate limit exceeded.")
 
-    # Build the full conversation: history + new user message
-    contents = request.history + [{"role": "user", "parts": [request.message]}]
+    chunks = session_material_chunks.get(request.session_id, [])
+    context = build_context(chunks, request.message)
+
+    if request.mode == "quiz":
+        last_q = session_last_question.get(request.session_id)
+        if last_q:
+            system_prompt = build_evaluation_prompt(context, last_q, request.message)
+            session_last_question[request.session_id] = None
+        else:
+            system_prompt = build_quiz_prompt(context)
+    else:
+        system_prompt = build_explain_prompt(context)
+
+    contents = (
+        [{"role": "user", "parts": [system_prompt]}]
+        + [{"role": m["role"], "parts": [m["content"]]} for m in request.history]
+        + [{"role": "user", "parts": [request.message]}]
+    )
+
     response = model.generate_content(contents)
     usage = response.usage_metadata
+
+    if request.mode == "quiz":
+        session_last_question[request.session_id] = response.text
 
     return {
         "response": response.text,
@@ -112,68 +195,60 @@ async def chat(request: ChatRequest):
             "input_tokens": usage.prompt_token_count,
             "output_tokens": usage.candidates_token_count,
             "estimated_cost_usd": estimate_cost(
-                usage.prompt_token_count, usage.candidates_token_count
+                usage.prompt_token_count,
+                usage.candidates_token_count,
             ),
         },
     }
 
 
+# ─── Chat (streaming SSE) ──────────────────────────────────────
 @app.post("/chat/stream")
 async def chat_stream(request: ChatRequest):
-    """
-    Streaming endpoint using Server-Sent Events (SSE).
-
-    SSE wire format:
-        data: {"type": "text", "content": "Hello"}\n\n
-        data: {"type": "done", "usage": {...}}\n\n
-    Each event is "data: <payload>\n\n" — the double newline ends the event.
-    """
     if not check_rate_limit(request.session_id):
         raise HTTPException(status_code=429, detail="Rate limit exceeded.")
 
     def generate():
-        # Build the full conversation: history + new user message
-        contents = request.history + [{"role": "user", "parts": [request.message]}]
-        response = model.generate_content(contents, stream=True)
-        print(response)
+        chunks = session_material_chunks.get(request.session_id, [])
+        context = build_context(chunks, request.message)
 
-        # Each chunk is a GenerateContentResponse with done=False until the last one.
-        # Structure of each chunk:
-        #   candidates[0].content.parts[0].text  — the token(s) generated in this chunk
-        #   usage_metadata.prompt_token_count     — input tokens (only reliable on the last chunk)
-        #   usage_metadata.candidates_token_count — output tokens so far
-        # chunk.text is a shorthand for candidates[0].content.parts[0].text
-        # See https://ai.google.dev/gemini-api/docs/text-generation# for details on the response structure.
-        # On each iteration it blocks until Gemini sends the next chunk. So   
-        # the loop:                                                                                                                                                                                  
-        #   1. Asks Gemini for the next chunk — blocks here until it arrives                                                                                           
-        #   2. If the chunk has text, yields it to the browser
-        #   3. Goes back to step 1                                                                                                                                     
-        # When Gemini signals it is done (no more chunks), the for loop exits naturally and execution continues to the usage_metadata and the final done event. 
+        if request.mode == "quiz":
+            last_q = session_last_question.get(request.session_id)
+            if last_q:
+                system_prompt = build_evaluation_prompt(context, last_q, request.message)
+                session_last_question[request.session_id] = None
+            else:
+                system_prompt = build_quiz_prompt(context)
+        else:
+            system_prompt = build_explain_prompt(context)
+
+        contents = (
+            [{"role": "user", "parts": [system_prompt]}]
+            + [{"role": m["role"], "parts": [m["content"]]} for m in request.history]
+            + [{"role": "user", "parts": [request.message]}]
+        )
+
+        response = model.generate_content(contents, stream=True)
+
+        full_text = ""
+
         for chunk in response:
             if chunk.text:
-                event = json.dumps({"type": "text", "content": chunk.text})
-                yield f"data: {event}\n\n"
+                full_text += chunk.text
+                yield f"data: {json.dumps({'type': 'text', 'content': chunk.text})}\n\n"
 
-        # After iteration, usage_metadata is populated
+        if request.mode == "quiz":
+            session_last_question[request.session_id] = full_text
+
         usage = response.usage_metadata
-        done_event = json.dumps({
-            "type": "done",
-            "usage": {
-                "input_tokens": usage.prompt_token_count,
-                "output_tokens": usage.candidates_token_count,
-                "estimated_cost_usd": estimate_cost(
-                    usage.prompt_token_count, usage.candidates_token_count
-                ),
-            },
-        })
-        yield f"data: {done_event}\n\n"
+
+        yield f"data: {json.dumps({'type': 'done', 'usage': {'input_tokens': usage.prompt_token_count, 'output_tokens': usage.candidates_token_count}})}\n\n"
 
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",  # tells nginx: don't buffer this
+            "X-Accel-Buffering": "no",
         },
     )
