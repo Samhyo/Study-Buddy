@@ -39,7 +39,7 @@ app = FastAPI(title="LLM Chat API")
 # Allow requests from the React dev server
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -66,6 +66,25 @@ def check_rate_limit(session_id: str) -> bool:
     request_timestamps[session_id].append(now)
     return True
 
+def normalize_history(history: list[dict]) -> list[dict]:
+    role_map = {
+        "user": "USER",
+        "assistant": "MODEL",
+        "system": "SYSTEM",
+    }
+
+    normalized = []
+    for item in history:
+        if "parts" in item:
+            normalized.append(item)
+        elif "role" in item and "content" in item:
+            role = item["role"].lower()
+            if role not in role_map:
+                raise HTTPException(status_code=400, detail=f"Unsupported role: {item['role']}")
+            normalized.append({"role": role_map[role], "parts": [item["content"]]})
+        else:
+            raise HTTPException(status_code=400, detail="Invalid history item format")
+    return normalized
 
 # ─── Cost estimation ──────────────────────────────────────────────────────────
 # Gemini 2.5 Flash Lite pricing (as of 2025, per million tokens)
