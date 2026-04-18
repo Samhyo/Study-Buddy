@@ -59,6 +59,22 @@ body {
   color: var(--text);
 }
 
+.mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.mode-toggle select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 14px;
+  padding: 4px 8px;
+}
+
 .session-id {
   font-size: 11px;
   color: var(--text-muted);
