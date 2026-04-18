@@ -11,6 +11,8 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+# VISSIIN TURHA ??
+#from requests import request
 
 load_dotenv()
 
@@ -27,7 +29,7 @@ app = FastAPI(title="LLM Chat API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -52,6 +54,25 @@ def check_rate_limit(session_id: str) -> bool:
     request_timestamps[session_id].append(now)
     return True
 
+def normalize_history(history: list[dict]) -> list[dict]:
+    role_map = {
+        "user": "USER",
+        "assistant": "MODEL",
+        "system": "SYSTEM",
+    }
+
+    normalized = []
+    for item in history:
+        if "parts" in item:
+            normalized.append(item)
+        elif "role" in item and "content" in item:
+            role = item["role"].lower()
+            if role not in role_map:
+                raise HTTPException(status_code=400, detail=f"Unsupported role: {item['role']}")
+            normalized.append({"role": role_map[role], "parts": [item["content"]]})
+        else:
+            raise HTTPException(status_code=400, detail="Invalid history item format")
+    return normalized
 
 # ─── Cost estimation ───────────────────────────────────────────
 INPUT_COST_PER_M = 0.10
@@ -139,6 +160,45 @@ class ChatRequest(BaseModel):
     session_id: str = "default"
     mode: str = "explain"
 
+def convert_history(history: list[dict]):
+    converted = []
+
+    for msg in history:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+
+        if role not in ["user", "assistant"]:
+            role = "user"
+
+        converted.append({
+            "role": role,
+            "parts": [content]
+        })
+
+    return converted
+
+def build_contents(request: ChatRequest):
+    if request.mode == "quiz":
+        system_prompt = (
+            "You are Study Buddy in quiz mode. "
+            "Do not immediately give the full answer. "
+            "Ask the student guiding questions, one small step at a time."
+        )
+    else:
+        system_prompt = (
+            "You are Study Buddy in explain mode. "
+            "Explain clearly, simply, and in a student-friendly way."
+        )
+
+    converted_history = convert_history(request.history)
+
+    contents = [
+        {"role": "user", "parts": [system_prompt]}
+    ] + converted_history + [
+        {"role": "user", "parts": [request.message]}
+    ]
+
+    return contents
 
 # ─── Health check ──────────────────────────────────────────────
 @app.get("/health")

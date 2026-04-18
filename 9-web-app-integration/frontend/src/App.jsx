@@ -24,6 +24,7 @@ export default function App() {
   const [streamingEnabled, setStreamingEnabled] = useState(true)
   const [lastUsage, setLastUsage] = useState(null)
   const [error, setError] = useState(null)
+  const [mode, setMode] = useState('explain')
 
   async function sendMessage(text) {
     if (!text.trim() || isStreaming) return
@@ -143,6 +144,13 @@ export default function App() {
           <span className="session-id">Session: {SESSION_ID}</span>
         </div>
         <div className="header-controls">
+          <label className="mode-toggle">
+            <span>Mode:</span>
+            <select value={mode} onChange={(e) => setMode(e.target.value)} disabled={isStreaming}>
+              <option value="explain">Explain</option>
+              <option value="quiz">Quiz</option>
+            </select>
+          </label>
           <label className="streaming-toggle">
             <input
               type="checkbox"
