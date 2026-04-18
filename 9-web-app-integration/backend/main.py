@@ -20,6 +20,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+# VISSIIN TURHA ??
+#from requests import request
 
 load_dotenv()
 
@@ -30,7 +32,7 @@ if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY not set")
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-2.5-flash-lite") #gemini-2.5-flash-lite #gemma4-31b-it
+model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
 app = FastAPI(title="LLM Chat API")
 
@@ -101,7 +103,47 @@ class ChatRequest(BaseModel):
     message: str
     history: list[dict] = []   # [{"role": "user"|"assistant", "content": "..."}]
     session_id: str = "default"
+    mode: str = "explain"
 
+def convert_history(history: list[dict]):
+    converted = []
+
+    for msg in history:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+
+        if role not in ["user", "assistant"]:
+            role = "user"
+
+        converted.append({
+            "role": role,
+            "parts": [content]
+        })
+
+    return converted
+
+def build_contents(request: ChatRequest):
+    if request.mode == "quiz":
+        system_prompt = (
+            "You are Study Buddy in quiz mode. "
+            "Do not immediately give the full answer. "
+            "Ask the student guiding questions, one small step at a time."
+        )
+    else:
+        system_prompt = (
+            "You are Study Buddy in explain mode. "
+            "Explain clearly, simply, and in a student-friendly way."
+        )
+
+    converted_history = convert_history(request.history)
+
+    contents = [
+        {"role": "user", "parts": [system_prompt]}
+    ] + converted_history + [
+        {"role": "user", "parts": [request.message]}
+    ]
+
+    return contents
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
@@ -120,8 +162,8 @@ async def chat(request: ChatRequest):
     if not check_rate_limit(request.session_id):
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again in a moment.")
 
-    # Build the full conversation: normalized history + new user message
-    contents = normalize_history(request.history) + [{"role": "USER", "parts": [request.message]}]
+    # Build the full conversation: history + new user message
+    contents = build_contents(request)
     response = model.generate_content(contents)
     usage = response.usage_metadata
 
@@ -151,8 +193,8 @@ async def chat_stream(request: ChatRequest):
         raise HTTPException(status_code=429, detail="Rate limit exceeded.")
 
     def generate():
-        # Build the full conversation: normalized history + new user message
-        contents = normalize_history(request.history) + [{"role": "USER", "parts": [request.message]}]
+        # Build the full conversation: history + new user message
+        contents = build_contents(request)
         response = model.generate_content(contents, stream=True)
         print(response)
 
@@ -168,7 +210,7 @@ async def chat_stream(request: ChatRequest):
         #   1. Asks Gemini for the next chunk — blocks here until it arrives                                                                                           
         #   2. If the chunk has text, yields it to the browser
         #   3. Goes back to step 1                                                                                                                                     
-        # When Gemini signals it is done (no more chunks), the for loop exits naturally and execution continues to the usage_metadata and the final done event. 
+        # When Gemini signals it is done (no more chunks), the for loop exits naturally and execution continues to the usage_metadata and the final done event.
         for chunk in response:
             if chunk.text:
                 event = json.dumps({"type": "text", "content": chunk.text})
