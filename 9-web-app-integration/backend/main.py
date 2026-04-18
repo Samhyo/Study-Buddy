@@ -16,10 +16,12 @@ from collections import defaultdict
 
 import google.generativeai as genai
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from services.parser import extract_text_from_pdf
+from services.gemini_service import generate_quiz
 
 load_dotenv()
 
@@ -196,3 +198,23 @@ async def chat_stream(request: ChatRequest):
             "X-Accel-Buffering": "no",  # tells nginx: don't buffer this
         },
     )
+
+#pdf uploader
+@app.post("/upload-pdf")
+async def upload_pdf(file: UploadFile = File(...)):
+    # 1. Validate file type
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+
+    try:
+        # 2. Read file bytes and extract text
+        pdf_content = await file.read()
+        extracted_text = extract_text_from_pdf(pdf_content)
+
+        # 3. Pass text to Gemini (we'll build this next)
+        quiz = await generate_quiz(extracted_text)
+        
+        return {"filename": file.filename, "quiz": quiz}
+    
+    except Exception as e:
+        return {"error": str(e)}

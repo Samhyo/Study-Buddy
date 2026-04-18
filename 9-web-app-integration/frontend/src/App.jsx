@@ -25,6 +25,45 @@ export default function App() {
   const [lastUsage, setLastUsage] = useState(null)
   const [error, setError] = useState(null)
 
+  // Handle PDF upload
+  async function uploadFile(file) {
+    if (isStreaming) return;
+    
+    setError(null);
+    setIsStreaming(true);
+
+    setMessages(prev => [...prev, { role: 'user', content: `Uploaded file: ${file.name}` }]);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch(`${API_BASE}/upload-pdf`, {
+        method: 'POST',
+        body: formData, // No Content-Type header; browser sets it with boundary
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.detail || "Failed to process PDF");
+      }
+
+      const data = await response.json();
+
+      // Add the Quiz to the chat
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: "I've generated a quiz based on your notes!",
+        quizData: data.quiz // Store the structured quiz data here
+      }]);
+
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsStreaming(false);
+    }
+  }
+
   async function sendMessage(text) {
     if (!text.trim() || isStreaming) return
 
@@ -158,7 +197,7 @@ export default function App() {
         </div>
       </header>
 
-      <ChatInput onSend={sendMessage} disabled={isStreaming} />
+      <ChatInput onSend={sendMessage} onUpload={uploadFile} disabled={isStreaming} />
 
       {lastUsage && <UsageBar usage={lastUsage} />}
 
