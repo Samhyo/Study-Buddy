@@ -284,3 +284,11 @@ body {
 
 .btn-send:hover:not(:disabled) { opacity: 0.85; }
 .btn-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.quiz-card-ui { background: #fdfdfd; border: 1px solid #ddd; padding: 16px; border-radius: 12px; margin-top: 10px; color: #333; }
+.opt-button { display: block; width: 100%; text-align: left; padding: 10px; margin: 4px 0; border: 1px solid #ccc; border-radius: 6px; cursor: pointer; background: white; }
+.selected-ans { border-color: #2196f3; background: #e3f2fd; }
+.correct-ans { background: #c8e6c9 !important; border-color: #4caf50 !important; }
+.wrong-ans { background: #ffcdd2 !important; border-color: #f44336 !important; }
+.check-btn { margin-top: 12px; width: 100%; padding: 12px; background: #2196f3; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+.check-btn:disabled { background: #ccc; cursor: not-allowed; }

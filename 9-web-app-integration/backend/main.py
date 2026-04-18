@@ -10,10 +10,12 @@ from typing import List
 import google.generativeai as genai
 from pypdf import PdfReader
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from services.parser import extract_text_from_pdf
+from services.gemini_service import generate_quiz
 
 load_dotenv()
 
@@ -262,10 +264,48 @@ async def chat_stream(request: ChatRequest):
 
         for chunk in response:
             if chunk.text:
-                full_text += chunk.text
-                yield f"data: {json.dumps({'type': 'text', 'content': chunk.text})}\n\n"
+                event = json.dumps({"type": "text", "content": chunk.text})
+                yield f"data: {event}\n\n"
 
-        if request.mode == "quiz":
-            session_last_question[request.session_id] = full_text
+        # After iteration, usage_metadata is populated
+        usage = response.usage_metadata
+        done_event = json.dumps({
+            "type": "done",
+            "usage": {
+                "input_tokens": usage.prompt_token_count,
+                "output_tokens": usage.candidates_token_count,
+                "estimated_cost_usd": estimate_cost(
+                    usage.prompt_token_count, usage.candidates_token_count
+                ),
+            },
+        })
+        yield f"data: {done_event}\n\n"
 
-    return StreamingResponse(generate(), media_type="text/event-stream")
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # tells nginx: don't buffer this
+        },
+    )
+
+#pdf uploader
+@app.post("/upload-pdf")
+async def upload_pdf(file: UploadFile = File(...)):
+    # 1. Validate file type
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+
+    try:
+        # 2. Read file bytes and extract text
+        pdf_content = await file.read()
+        extracted_text = extract_text_from_pdf(pdf_content)
+
+        # 3. Pass text to Gemini (we'll build this next)
+        quiz = await generate_quiz(extracted_text)
+        
+        return {"filename": file.filename, "quiz": quiz}
+    
+    except Exception as e:
+        return {"error": str(e)}
