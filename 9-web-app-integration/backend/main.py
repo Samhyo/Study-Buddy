@@ -2,22 +2,21 @@ import json
 import os
 import time
 import re
+import io
+import random
 from collections import defaultdict
 from typing import List
 
 import google.generativeai as genai
+from pypdf import PdfReader
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-# VISSIIN TURHA ??
-#from requests import request
 
 load_dotenv()
 
-
-# ─── Setup ─────────────────────────────────────────────────────
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY not set")
@@ -35,8 +34,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# ─── Rate limiting ─────────────────────────────────────────────
 RATE_LIMIT_REQUESTS = 20
 RATE_LIMIT_WINDOW = 60
 
@@ -53,6 +50,7 @@ def check_rate_limit(session_id: str) -> bool:
         return False
     request_timestamps[session_id].append(now)
     return True
+
 
 def normalize_history(history: list[dict]) -> list[dict]:
     role_map = {
@@ -74,22 +72,11 @@ def normalize_history(history: list[dict]) -> list[dict]:
             raise HTTPException(status_code=400, detail="Invalid history item format")
     return normalized
 
-# ─── Cost estimation ───────────────────────────────────────────
-INPUT_COST_PER_M = 0.10
-OUTPUT_COST_PER_M = 0.40
 
-
-def estimate_cost(input_tokens: int, output_tokens: int) -> float:
-    return (input_tokens / 1_000_000) * INPUT_COST_PER_M + \
-           (output_tokens / 1_000_000) * OUTPUT_COST_PER_M
-
-
-# ─── Study Buddy state (materiaalit + quiz tila) ───────────────
 session_material_chunks: dict[str, List[str]] = {}
 session_last_question: dict[str, str] = {}
 
 
-# ─── Study engine (chunking + context + promptit) ──────────────
 def chunk_text(text: str, chunk_size: int = 800, overlap: int = 100):
     chunks = []
     start = 0
@@ -112,6 +99,16 @@ def get_relevant_chunks(chunks, query, top_k=3):
     return [c for s, c in scores[:top_k] if s > 0]
 
 
+def get_random_chunk(chunks):
+    return random.choice(chunks) if chunks else ""
+
+
+MAX_CONTEXT_CHARS = 2000
+
+def trim_context(text: str):
+    return text[:MAX_CONTEXT_CHARS]
+
+
 def build_context(chunks, query):
     relevant = get_relevant_chunks(chunks, query)
     return "\n\n---\n\n".join(relevant) if relevant else ""
@@ -128,9 +125,11 @@ Material:
 
 def build_quiz_prompt(context):
     return f"""
-You are a study buddy.
-Ask ONE question based on the material.
-Do not explain yet.
+You are a strict study assistant.
+
+Ask ONE exam-style question based ONLY on the material.
+Do NOT explain the answer.
+
 Material:
 {context}
 """
@@ -153,64 +152,34 @@ Evaluate the answer (correct / partial / incorrect) and ask a new question.
 """
 
 
-# ─── Request model ─────────────────────────────────────────────
 class ChatRequest(BaseModel):
     message: str
     history: list[dict] = []
     session_id: str = "default"
     mode: str = "explain"
 
-def convert_history(history: list[dict]):
-    converted = []
 
-    for msg in history:
-        role = msg.get("role", "user")
-        content = msg.get("content", "")
-
-        if role not in ["user", "assistant"]:
-            role = "user"
-
-        converted.append({
-            "role": role,
-            "parts": [content]
-        })
-
-    return converted
-
-def build_contents(request: ChatRequest):
-    if request.mode == "quiz":
-        system_prompt = (
-            "You are Study Buddy in quiz mode. "
-            "Do not immediately give the full answer. "
-            "Ask the student guiding questions, one small step at a time."
-        )
-    else:
-        system_prompt = (
-            "You are Study Buddy in explain mode. "
-            "Explain clearly, simply, and in a student-friendly way."
-        )
-
-    converted_history = convert_history(request.history)
-
-    contents = [
-        {"role": "user", "parts": [system_prompt]}
-    ] + converted_history + [
-        {"role": "user", "parts": [request.message]}
-    ]
-
-    return contents
-
-# ─── Health check ──────────────────────────────────────────────
 @app.get("/health")
 async def health():
     return {"status": "ok"}
 
 
-# ─── Upload (materiaalin syöttö AI:lle) ────────────────────────
 @app.post("/upload")
 async def upload(file: UploadFile = File(...), session_id: str = "default"):
     content = await file.read()
-    text = content.decode("utf-8", errors="ignore")
+    text = ""
+
+    if file.filename.endswith(".pdf"):
+        reader = PdfReader(io.BytesIO(content))
+        for page in reader.pages:
+            extracted = page.extract_text()
+            if extracted:
+                text += extracted + "\n"
+    else:
+        text = content.decode("utf-8", errors="ignore")
+
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Could not extract text")
 
     chunks = chunk_text(text)
     session_material_chunks[session_id] = chunks
@@ -218,14 +187,19 @@ async def upload(file: UploadFile = File(...), session_id: str = "default"):
     return {"status": "uploaded", "chunks": len(chunks)}
 
 
-# ─── Chat (non-stream) ─────────────────────────────────────────
 @app.post("/chat")
 async def chat(request: ChatRequest):
     if not check_rate_limit(request.session_id):
         raise HTTPException(status_code=429, detail="Rate limit exceeded.")
 
     chunks = session_material_chunks.get(request.session_id, [])
-    context = build_context(chunks, request.message)
+
+    if request.mode == "quiz":
+        context = get_random_chunk(chunks)
+    else:
+        context = build_context(chunks, request.message)
+
+    context = trim_context(context)
 
     if request.mode == "quiz":
         last_q = session_last_question.get(request.session_id)
@@ -238,31 +212,19 @@ async def chat(request: ChatRequest):
         system_prompt = build_explain_prompt(context)
 
     contents = (
-        [{"role": "user", "parts": [system_prompt]}]
-        + [{"role": m["role"], "parts": [m["content"]]} for m in request.history]
-        + [{"role": "user", "parts": [request.message]}]
+        [{"role": "USER", "parts": [system_prompt]}]
+        + normalize_history(request.history)
+        + [{"role": "USER", "parts": [request.message]}]
     )
 
     response = model.generate_content(contents)
-    usage = response.usage_metadata
 
     if request.mode == "quiz":
         session_last_question[request.session_id] = response.text
 
-    return {
-        "response": response.text,
-        "usage": {
-            "input_tokens": usage.prompt_token_count,
-            "output_tokens": usage.candidates_token_count,
-            "estimated_cost_usd": estimate_cost(
-                usage.prompt_token_count,
-                usage.candidates_token_count,
-            ),
-        },
-    }
+    return {"response": response.text}
 
 
-# ─── Chat (streaming SSE) ──────────────────────────────────────
 @app.post("/chat/stream")
 async def chat_stream(request: ChatRequest):
     if not check_rate_limit(request.session_id):
@@ -270,7 +232,13 @@ async def chat_stream(request: ChatRequest):
 
     def generate():
         chunks = session_material_chunks.get(request.session_id, [])
-        context = build_context(chunks, request.message)
+
+        if request.mode == "quiz":
+            context = get_random_chunk(chunks)
+        else:
+            context = build_context(chunks, request.message)
+
+        context = trim_context(context)
 
         if request.mode == "quiz":
             last_q = session_last_question.get(request.session_id)
@@ -283,9 +251,9 @@ async def chat_stream(request: ChatRequest):
             system_prompt = build_explain_prompt(context)
 
         contents = (
-            [{"role": "user", "parts": [system_prompt]}]
-            + [{"role": m["role"], "parts": [m["content"]]} for m in request.history]
-            + [{"role": "user", "parts": [request.message]}]
+            [{"role": "USER", "parts": [system_prompt]}]
+            + normalize_history(request.history)
+            + [{"role": "USER", "parts": [request.message]}]
         )
 
         response = model.generate_content(contents, stream=True)
@@ -300,15 +268,4 @@ async def chat_stream(request: ChatRequest):
         if request.mode == "quiz":
             session_last_question[request.session_id] = full_text
 
-        usage = response.usage_metadata
-
-        yield f"data: {json.dumps({'type': 'done', 'usage': {'input_tokens': usage.prompt_token_count, 'output_tokens': usage.candidates_token_count}})}\n\n"
-
-    return StreamingResponse(
-        generate(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-    )
+    return StreamingResponse(generate(), media_type="text/event-stream")
