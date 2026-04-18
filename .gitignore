@@ -1,0 +1,17 @@
+.env
+venv
+
+# Python virtual environment
+venv/
+.venv/
+env/
+
+# Environment variables (keeps your Gemini API key safe!)
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Node modules (for when you start the React frontend)
+node_modules/
