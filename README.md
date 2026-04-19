@@ -75,3 +75,6 @@ Create file:
 Photosynthesis is the process by which plants convert sunlight into energy.
 It occurs in chloroplasts and produces oxygen.
 ```
+Then:
+- Click Upload
+- Select the file
