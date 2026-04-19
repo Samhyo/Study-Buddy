@@ -126,7 +126,7 @@ http://localhost:5173
 ### 3. Using the application
 
 **1. Upload a file:**
-- Supported formats: .txt, -pdf
+- Supported formats: `.txt`, `.pdf`
 - The system extracts and processes the content
   
 **2. Choose a mode:**
