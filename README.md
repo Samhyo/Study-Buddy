@@ -12,69 +12,40 @@
 
 ---
 
-## 🧠 Project Overview (Simplified)
+## 🧠 Project Overview
 
-Study Buddy AI is a web-based chatbot designed to help users learn and practice topics interactively.
+Study Buddy AI is an interactive chatbot that helps users learn and practice topics.
 
-The application can:
-- Explain concepts in a simple way
-- Generate quiz questions
-- Evaluate user answers
-- Use user-provided study material
-
-The system works as a conversational study assistant that adapts between teaching and testing modes.
+It can:
+- Explain concepts clearly
+- Ask quiz questions
+- Evaluate answers
+- Use your own study material
 
 ---
 
 ## 🏗️ Architecture
 
-### Backend
-- Built with **FastAPI (Python)**
-- Handles API requests, AI logic, and session management
-- Manages:
-  - Chat endpoints
-  - File uploads
-  - Study logic (quiz & explanation modes)
-
-### Frontend
-- Built with **React (Vite + JavaScript)**
-- Provides user interface for:
-  - Chat interaction
-  - Mode switching (Explain / Quiz)
-  - File uploads
-
-### LLM Provider
-- **Google Gemini API**
-- Used for:
-  - Text generation
-  - Question creation
-  - Answer evaluation
+- **Backend:** FastAPI (Python)  
+- **Frontend:** React (Vite)  
+- **AI:** Google Gemini API  
 
 ---
 
 ## ⚙️ Technical Decisions
 
-### Backend
-- **FastAPI** → lightweight and fast for building APIs
-- **Uvicorn** → ASGI server for running the backend
-- **Pydantic** → request validation
-- **Streaming (SSE)** → real-time AI responses
-
-### Frontend
-- **React** → component-based UI
-- **Vite** → fast development environment
-
-### AI Logic
-- **Prompt engineering** → controls AI behavior (explain vs quiz)
-- **Lightweight RAG (Retrieval-Augmented Generation)**:
-  - Text is split into chunks
-  - Relevant parts are selected using keyword matching
-  - Only relevant content is sent to the AI
+- FastAPI → lightweight backend  
+- React → modern UI  
+- Streaming → real-time responses  
+- Lightweight RAG → chunking + keyword retrieval  
 
 ---
 
-## 🧪 How to Use
+## 🧪 How to Run and Use the Project
 
-### 1. Start Backend
+Follow these steps:
+
+### 1. Clone the repository
 ```bash
-python -m uvicorn main:app --reload
+git clone <your-repo-url>
+cd <your-repo-folder>
