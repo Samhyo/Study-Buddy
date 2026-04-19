@@ -61,4 +61,12 @@ You should see:
 ```bash
 Uvicorn running on http://127.0.0.1:8000
 ```
-####FRONTEND
+#### FRONTEND
+```cd frontend
+npm install
+npm run dev
+```
+Open:
+http://localhost:5173
+
+
