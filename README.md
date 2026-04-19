@@ -273,7 +273,7 @@ This keeps responses fast, efficient, and within model constraints.
 
 ---
 
-##🚀 Summary
+## 🚀 Summary
 This project demonstrates how to build a modern AI-powered learning assistant using:
 - FastAPI (backend)
 - React (frontend)
