@@ -48,8 +48,8 @@ Follow these steps:
 ### 1. Clone the repository
 ```bash
 git clone <your-repo-url>
-cd <your-repo-folder>```
-
+cd <your-repo-folder>
+```
 ### 2. Start backend and frontend
 ```bash
 cd backend
