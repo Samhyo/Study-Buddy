@@ -192,3 +192,41 @@ To make this system production-ready, the following improvements would be needed
 - Store data in a **database** instead of memory
 - Deploy the system to a **cloud environment**
 - Improve prompt design for more consistent quiz evaluation
+
+## 🤖 AI Tools Used
+
+### Google Gemini API
+
+The core AI functionality is powered by the Google Gemini API. It is used for generating explanations, quiz questions, and evaluating user answers. The model was chosen because it offers a free tier, fast response times, and good performance for conversational tasks.
+
+---
+
+### Prompt Engineering
+
+Different system prompts are used to control the AI’s behavior. The application switches between:
+- explanation mode (teaching concepts)
+- quiz mode (asking and evaluating questions)
+
+This allows the same model to perform multiple roles effectively.
+
+---
+
+### Lightweight RAG (Retrieval-Augmented Generation)
+
+The system uses a simplified RAG approach:
+- uploaded material is split into chunks
+- relevant parts are selected based on the user query
+- only those parts are sent to the AI
+
+This improves response quality and reduces token usage.
+
+---
+
+### Token Management
+
+LLMs have limits on how much text they can process at once (token limits). To handle this:
+- context is trimmed to a maximum size
+- only relevant chunks are used
+- unnecessary text is excluded
+
+This keeps responses fast, efficient, and within model constraints.
