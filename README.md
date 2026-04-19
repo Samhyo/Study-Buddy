@@ -26,9 +26,44 @@ It can:
 
 ## 🏗️ Architecture
 
-- **Backend:** FastAPI (Python)  
-- **Frontend:** React (Vite)  
-- **AI:** Google Gemini API  
+### 🔹 Backend (FastAPI)
+
+The backend is built using **FastAPI**, which is a lightweight and high-performance Python web framework. 
+It was chosen because it is easy to set up, supports async operations, and integrates well with modern AI APIs. 
+FastAPI handles all core logic including request handling, session management, file processing, and communication with the AI model.
+
+---
+
+### 🔹 Frontend (React + Vite)
+
+The frontend is implemented with **React** and powered by **Vite** for fast development and hot reloading. 
+React allows building a dynamic and responsive user interface for chat interaction, while Vite ensures quick startup and efficient development workflow. 
+The frontend communicates with the backend via REST API and streaming responses.
+
+---
+
+### 🔹 AI Model (Google Gemini API)
+
+The application uses the **Google Gemini API**, specifically a lightweight model suitable for real-time applications. 
+It was chosen because it provides a free tier, fast response times, and good performance for conversational tasks like explanations and quiz generation. 
+The model operates with token limits, meaning both the input (prompt + context) and output must stay within a maximum size. 
+To handle this, the system trims context and only sends relevant parts of the uploaded material to the model.
+
+---
+
+### 🔹 Context Retrieval (Lightweight RAG)
+
+The system uses a simple **Retrieval-Augmented Generation (RAG)** approach. 
+Uploaded text is split into smaller chunks, and only the most relevant parts are selected based on the user’s query. 
+This reduces token usage, improves response quality, and keeps the system efficient without requiring a full vector database.
+
+---
+
+### 🔹 Streaming (Server-Sent Events)
+
+Responses are streamed from the backend using **Server-Sent Events (SSE)**. 
+This allows the user to see the AI response in real time instead of waiting for the full output.
+It improves user experience and makes the application feel faster and more interactive.
 
 ---
 
@@ -89,13 +124,13 @@ Open in browser:
 http://localhost:5173
 
 ### 3. Using the application
-1. Upload a file:
+**1. Upload a file:**
 - Supported formats: .txt, -pdf
 - The system extracts and processes the content
-2. Choose a mode:
-- Explain mode -> AI explains the content
-- Quiz mode -> AI asks questions about the files
-3. Start chatting:
+**2. Choose a mode:**
+- **Explain mode** -> AI explains the content
+- **Quiz mode** -> AI asks questions about the files
+**3. Start chatting:**
 - Ask questions
 - Request explanations
 - Answer quiz questions
