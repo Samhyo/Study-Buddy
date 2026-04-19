@@ -124,12 +124,15 @@ Open in browser:
 http://localhost:5173
 
 ### 3. Using the application
+
 **1. Upload a file:**
 - Supported formats: .txt, -pdf
 - The system extracts and processes the content
+- 
 **2. Choose a mode:**
 - **Explain mode** -> AI explains the content
 - **Quiz mode** -> AI asks questions about the files
+
 **3. Start chatting:**
 - Ask questions
 - Request explanations
