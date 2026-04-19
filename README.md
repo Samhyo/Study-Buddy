@@ -197,7 +197,17 @@ To make this system production-ready, the following improvements would be needed
 
 ### Google Gemini API
 
-The core AI functionality is powered by the Google Gemini API. It is used for generating explanations, quiz questions, and evaluating user answers. The model was chosen because it offers a free tier, fast response times, and good performance for conversational tasks.
+The core AI functionality is powered by the Google Gemini API. It is used for generating explanations, quiz questions, and evaluating user answers. 
+The model was chosen because it offers a free tier, fast response times, and good performance for conversational tasks.
+
+### ChatGPT (OpenAI)
+
+ChatGPT was used as a supporting tool during development. It helped with:
+- explaining code and concepts
+- debugging and troubleshooting
+- writing and structuring the README documentation
+
+It was used as a productivity aid, while all final implementation decisions and code integration were done by the project team.
 
 ---
 
