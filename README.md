@@ -128,3 +128,5 @@ frontend/
 - Make sure backend is running before using frontend
 - Uploaded files are stored per session (not permanent)
 - Refreshing the page may reset the session
+
+---
