@@ -51,6 +51,7 @@ git clone <your-repo-url>
 cd <your-repo-folder>
 ```
 ### 2. Start backend and frontend
+#### BACKEND
 ```bash
 cd backend
 pip install -r requirements.txt
