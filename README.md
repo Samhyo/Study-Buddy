@@ -59,31 +59,72 @@ cd backend
 Install python dependencies:
 ```bash
 pip install -r requirements.txt
+```
+Make sure you have a .env file with your API key:
+```bash
+GEMINI_API_KEY=your_api_key_here
+```
+Start the backend server:
+```bash
 python -m uvicorn main:app --reload
 ```
-You should see:
+The Backend will run at:
 ```bash
-Uvicorn running on http://127.0.0.1:8000
+http://localhost:8000
 ```
 #### FRONTEND
-```cd frontend
+Open a new terminal and go to the frontend folder:
+```bash
+cd frontend
+```
+Install dependencies:
+```bash
 npm install
+```
+Start the development server:
+```bash
 npm run dev
 ```
-Open:
+Open in browser:
 http://localhost:5173
 
-### 3. Upload study material
-Create file:
-```bash
-Photosynthesis is the process by which plants convert sunlight into energy.
-It occurs in chloroplasts and produces oxygen.
-```
-Then:
-- Click Upload
-- Select the file
+### 3. Using the application
+1. Upload a file:
+- Supported formats: .txt, -pdf
+- The system extracts and processes the content
+2. Choose a mode:
+- Explain mode -> AI explains the content
+- Quiz mode -> AI asks questions about the files
+3. Start chatting:
+- Ask questions
+- Request explanations
+- Answer quiz questions
 
-### 4. Use explain mode
-Type:
+### 4. Example flow
+1. Upload study material (e.e. notes or PDF)
+2. Ask:
 ```bash
 Explain this topic
+```
+3. Switch to quiz mode:
+```bash
+Start quiz
+```
+4. Choose a correct answer
+
+### 5. Project structure simplified
+```bash
+backend/
+├── main.py
+├── services/
+│   ├── parser.py
+│   └── gemini_service.py
+
+frontend/
+├── src/
+├── components/
+```
+### Notes
+- Make sure backend is running before using frontend
+- Uploaded files are stored per session (not permanent)
+- Refreshing the page may reset the session
