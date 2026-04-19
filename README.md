@@ -82,8 +82,8 @@ Follow these steps:
 
 ### 1. Clone the repository
 ```bash
-git clone <this repository>
-cd <study-buddy>
+git clone <your-repo-url>
+cd <your-repo-url>
 ```
 ### 2. Start backend and frontend
 #### BACKEND
