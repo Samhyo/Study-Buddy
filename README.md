@@ -95,7 +95,7 @@ Install python dependencies:
 ```bash
 pip install -r requirements.txt
 ```
-Make sure you have a .env file with your API key:
+Make sure you have a `.env` file with your API key:
 ```bash
 GEMINI_API_KEY=your_api_key_here
 ```
