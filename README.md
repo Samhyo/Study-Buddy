@@ -69,4 +69,9 @@ npm run dev
 Open:
 http://localhost:5173
 
-
+### 3. Upload study material
+Create file:
+```bash
+Photosynthesis is the process by which plants convert sunlight into energy.
+It occurs in chloroplasts and produces oxygen.
+```
