@@ -52,8 +52,12 @@ cd <your-repo-folder>
 ```
 ### 2. Start backend and frontend
 #### BACKEND
+Go to backend folder:
 ```bash
 cd backend
+```
+Install python dependencies:
+```bash
 pip install -r requirements.txt
 python -m uvicorn main:app --reload
 ```
