@@ -1,9 +1,9 @@
 # 📚 Study Buddy AI
 
 ## 👥 Project Authors
-- Your Name 1  
-- Your Name 2  
-- Your Name 3  
+- Samuli Hyötylä
+- Tomi Ahola
+- Elias Hirviniemi  
 
 ---
 
