@@ -2,15 +2,13 @@ import json
 import os
 import time
 import re
-import io
 import random
 from collections import defaultdict
 from typing import List
 
 import google.generativeai as genai
-from pypdf import PdfReader
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, UploadFile, File, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -53,6 +51,11 @@ def check_rate_limit(session_id: str) -> bool:
     request_timestamps[session_id].append(now)
     return True
 
+INPUT_COST_PER_M = 0.10
+OUTPUT_COST_PER_M = 0.40
+
+def estimate_cost(input_tokens: int, output_tokens: int) -> float:
+    return (input_tokens / 1_000_000) * INPUT_COST_PER_M + (output_tokens / 1_000_000) * OUTPUT_COST_PER_M
 
 def normalize_history(history: list[dict]) -> list[dict]:
     role_map = {
@@ -160,7 +163,7 @@ class ChatRequest(BaseModel):
     session_id: str = "default"
     mode: str = "explain"
 
-
+# ---- API Endpoints ----
 @app.get("/health")
 async def health():
     return {"status": "ok"}
@@ -169,14 +172,9 @@ async def health():
 @app.post("/upload")
 async def upload(file: UploadFile = File(...), session_id: str = "default"):
     content = await file.read()
-    text = ""
 
     if file.filename.endswith(".pdf"):
-        reader = PdfReader(io.BytesIO(content))
-        for page in reader.pages:
-            extracted = page.extract_text()
-            if extracted:
-                text += extracted + "\n"
+        text = extract_text_from_pdf(content)
     else:
         text = content.decode("utf-8", errors="ignore")
 
@@ -186,9 +184,12 @@ async def upload(file: UploadFile = File(...), session_id: str = "default"):
     chunks = chunk_text(text)
     session_material_chunks[session_id] = chunks
 
-    return {"status": "uploaded", "chunks": len(chunks)}
-
-
+    return {
+        "status": "uploaded",
+        "filename": file.filename,
+        "chunks": len(chunks),
+    }
+    
 @app.post("/chat")
 async def chat(request: ChatRequest):
     if not check_rate_limit(request.session_id):
@@ -221,10 +222,23 @@ async def chat(request: ChatRequest):
 
     response = model.generate_content(contents)
 
+    response = model.generate_content(contents)
+
     if request.mode == "quiz":
         session_last_question[request.session_id] = response.text
 
-    return {"response": response.text}
+    usage = response.usage_metadata
+    input_tokens = getattr(usage, "prompt_token_count", 0)
+    output_tokens = getattr(usage, "candidates_token_count", 0)
+
+    return {
+        "response": response.text,
+        "usage": {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "estimated_cost_usd": estimate_cost(input_tokens, output_tokens),
+        },
+    }
 
 
 @app.post("/chat/stream")
@@ -264,22 +278,34 @@ async def chat_stream(request: ChatRequest):
 
         for chunk in response:
             if chunk.text:
+                full_text += chunk.text
                 event = json.dumps({"type": "text", "content": chunk.text})
                 yield f"data: {event}\n\n"
 
+        if request.mode == "quiz" and full_text.strip():
+            session_last_question[request.session_id] = full_text
+
         # After iteration, usage_metadata is populated
-        usage = response.usage_metadata
-        done_event = json.dumps({
-            "type": "done",
-            "usage": {
-                "input_tokens": usage.prompt_token_count,
-                "output_tokens": usage.candidates_token_count,
-                "estimated_cost_usd": estimate_cost(
-                    usage.prompt_token_count, usage.candidates_token_count
-                ),
-            },
-        })
-        yield f"data: {done_event}\n\n"
+        try:
+            usage = response.usage_metadata
+            input_tokens = getattr(usage, "prompt_token_count", 0)
+            output_tokens = getattr(usage, "candidates_token_count", 0)
+
+            done_event = json.dumps({
+                "type": "done",
+                "usage": {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "estimated_cost_usd": estimate_cost(input_tokens, output_tokens),
+                },
+            })
+            yield f"data: {done_event}\n\n"
+        except Exception as e:
+            error_event = json.dumps({
+                "type": "error",
+                "message": f"Streaming finished but usage metadata failed: {str(e)}"
+            })
+            yield f"data: {error_event}\n\n"
 
     return StreamingResponse(
         generate(),
