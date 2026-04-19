@@ -49,3 +49,9 @@ Follow these steps:
 ```bash
 git clone <your-repo-url>
 cd <your-repo-folder>
+
+### 2. Start backend and frontend
+```bash
+cd backend
+pip install -r requirements.txt
+python -m uvicorn main:app --reload
