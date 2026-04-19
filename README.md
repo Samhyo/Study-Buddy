@@ -78,3 +78,8 @@ It occurs in chloroplasts and produces oxygen.
 Then:
 - Click Upload
 - Select the file
+
+### 4. Use explain mode
+Type:
+```bash
+Explain this topic
