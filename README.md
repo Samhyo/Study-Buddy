@@ -168,3 +168,27 @@ frontend/
 - Refreshing the page may reset the session
 
 ---
+
+## ⚠️ Limitations & Future Work
+
+### Current Limitations
+
+- The system uses simple keyword-based retrieval instead of semantic search, which may miss relevant information in some cases.
+- Only `.txt` and basic `.pdf` files are supported, and text extraction from PDFs may not always be accurate.
+- There is no persistent storage — all data is stored in memory and lost when the server restarts.
+- The application does not include user authentication or multi-user data separation.
+- The system relies on a lightweight LLM model, which may produce less detailed or precise answers compared to larger models.
+
+---
+
+### Future Improvements
+
+To make this system production-ready, the following improvements would be needed:
+
+- Implement a **vector database** (e.g. FAISS) for better semantic search and retrieval
+- Add **embedding-based retrieval** instead of keyword matching
+- Improve **PDF parsing** and support more file formats
+- Add **user authentication and accounts**
+- Store data in a **database** instead of memory
+- Deploy the system to a **cloud environment**
+- Improve prompt design for more consistent quiz evaluation
