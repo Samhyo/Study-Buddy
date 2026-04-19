@@ -8,7 +8,7 @@
 ---
 
 ## 🎥 Demo Video
-*(Add link here)*
+(https://1drv.ms/v/c/6def40eb5184b167/IQCIliEs147qSqAF0s2CaXLiAegazNGS32LDnzGvyM62X0A?e=Mejqtr)
 
 ---
 
