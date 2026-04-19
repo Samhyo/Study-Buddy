@@ -128,7 +128,7 @@ http://localhost:5173
 **1. Upload a file:**
 - Supported formats: .txt, -pdf
 - The system extracts and processes the content
-- 
+  
 **2. Choose a mode:**
 - **Explain mode** -> AI explains the content
 - **Quiz mode** -> AI asks questions about the files
